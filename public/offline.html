@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dubai Luxury - Offline</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #000;
+      color: #fff;
+      text-align: center;
+    }
+    
+    .container {
+      padding: 2rem;
+      max-width: 600px;
+    }
+    
+    .logo {
+      margin-bottom: 2rem;
+    }
+    
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+    }
+    
+    p {
+      font-size: 1.125rem;
+      margin-bottom: 2rem;
+      color: #ccc;
+    }
+    
+    .button {
+      display: inline-block;
+      padding: 1rem 2rem;
+      background: #d4af37;
+      color: #000;
+      text-decoration: none;
+      border-radius: 9999px;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+    
+    .button:hover {
+      background: #c4a030;
+    }
+    
+    @media (max-width: 640px) {
+      .container {
+        padding: 1rem;
+      }
+      
+      h1 {
+        font-size: 1.5rem;
+      }
+      
+      p {
+        font-size: 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="/images/logo.png" alt="Dubai Luxury" width="150" height="50" class="logo">
+    <h1>You're currently offline</h1>
+    <p>Please check your internet connection and try again. Some features may be limited while offline.</p>
+    <a href="/" class="button">Try Again</a>
+  </div>
+  
+  <script>
+    // Check connection status
+    window.addEventListener('online', () => {
+      window.location.reload();
+    });
+    
+    // Retry button
+    document.querySelector('.button').addEventListener('click', (e) => {
+      e.preventDefault();
+      window.location.reload();
+    });
+  </script>
+</body>
+</html> 
