@@ -97,6 +97,7 @@ const ReviewForm: React.FC<ReviewFormProps> = ({
               onMouseLeave={() => setHoveredRating(0)}
               onClick={() => handleRatingClick(rating)}
               className="p-1 focus:outline-none"
+              aria-label={`Rate ${rating} stars`}
             >
               <Star
                 className={`h-8 w-8 ${
@@ -171,7 +172,10 @@ const ReviewForm: React.FC<ReviewFormProps> = ({
             </div>
           ))}
           {previewUrls.length < 5 && (
-            <label className="h-24 w-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-teal-500">
+            <label 
+              className="h-24 w-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-teal-500"
+              aria-label="Upload photos"
+            >
               <input
                 type="file"
                 accept="image/*"
@@ -179,6 +183,7 @@ const ReviewForm: React.FC<ReviewFormProps> = ({
                 className="hidden"
                 multiple
                 max="5"
+                aria-label="Upload up to 5 photos"
               />
               <Upload className="h-6 w-6 text-gray-400" />
             </label>
