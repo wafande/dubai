@@ -122,5 +122,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Contact
 
-Your Name - your.email@example.com
-Project Link: https://github.com/yourusername/dubai-luxury 
+Your Name - isaacmuchina70@gmail.com
+Project Link: https://github.com/wafande/dubai-luxury 
