@@ -60,42 +60,28 @@ export function Reports() {
   const loadMetrics = async () => {
     setIsLoading(true);
     try {
-      const data = await apiService.read(`/api/admin/analytics/dashboard?range=${dateRange}`);
+      const response = await apiService.instance.get(`/api/admin/analytics/dashboard?range=${dateRange}`);
       
-      if (!data || !data.summary) {
+      if (!response || !response.data || !response.data.summary) {
         throw new Error('Invalid response format');
       }
       
       // Transform the API data into the format we need
       const metrics: ReportMetrics = {
-        totalRevenue: data.summary.totalRevenue || 0,
-        totalBookings: data.summary.totalBookings || 0,
-        averageBookingValue: data.summary.totalBookings > 0 
-          ? data.summary.totalRevenue / data.summary.totalBookings 
+        totalRevenue: response.data.summary.totalRevenue || 0,
+        totalBookings: response.data.summary.totalBookings || 0,
+        averageBookingValue: response.data.summary.totalBookings > 0 
+          ? response.data.summary.totalRevenue / response.data.summary.totalBookings 
           : 0,
-        activeUsers: data.summary.totalUsers || 0,
-        revenueByService: Array.isArray(data.topServices) 
-          ? data.topServices.reduce<Record<string, number>>((acc, service: ServiceRevenue) => {
-              if (service?.name && typeof service.revenue === 'number') {
-                acc[service.name] = service.revenue;
-              }
-              return acc;
-            }, {})
-          : {},
+        activeUsers: response.data.summary.totalUsers || 0,
+        revenueByService: response.data.revenueByService || {},
         bookingsByStatus: {
-          completed: data.summary.completedBookings || 0,
-          pending: data.summary.pendingBookings || 0,
-          cancelled: data.summary.cancelledBookings || 0
+          completed: response.data.summary.completedBookings || 0,
+          pending: response.data.summary.pendingBookings || 0,
+          cancelled: response.data.summary.cancelledBookings || 0
         },
-        revenueByMonth: Array.isArray(data.monthlyRevenue)
-          ? data.monthlyRevenue.reduce<Record<string, number>>((acc, item: MonthlyRevenue) => {
-              if (item?.month && typeof item.revenue === 'number') {
-                acc[item.month] = item.revenue;
-              }
-              return acc;
-            }, {})
-          : {},
-        topCustomers: Array.isArray(data.topCustomers) ? data.topCustomers : []
+        revenueByMonth: response.data.revenueByMonth || {},
+        topCustomers: response.data.topCustomers || []
       };
 
       setMetrics(metrics);

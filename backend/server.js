@@ -9,12 +9,14 @@ require('dotenv').config();
 const toursRouter = require('./routes/tours');
 const reviewsRouter = require('./routes/reviews');
 const paymentsRouter = require('./routes/payments');
+const fleetRouter = require('./routes/admin/fleet');
 
 const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -27,6 +29,10 @@ app.use('/api/', limiter);
 app.use('/api/tours', toursRouter);
 app.use('/api', reviewsRouter);
 app.use('/api', paymentsRouter);
+app.use('/api/admin/fleet', fleetRouter);
+
+// Serve static files from the public directory
+app.use('/uploads', express.static('public/uploads'));
 
 // Database connection pool
 const pool = mysql.createPool({
@@ -598,25 +604,24 @@ app.get('/api/admin/analytics/dashboard', authenticateToken, isAdmin, async (req
       WHERE created_at >= DATE_SUB(CURDATE(), ${dateFilter})
     `);
 
-    // Get top services/vehicle types with proper null handling
-    const [topServices] = await pool.query(`
+    // Get revenue by service with proper null handling
+    const [revenueByService] = await pool.query(`
       SELECT 
         COALESCE(f.type, 'unknown') as name,
-        COUNT(*) as bookingCount,
         COALESCE(SUM(fb.total_amount), 0) as revenue
       FROM fleet_bookings fb
       JOIN fleet f ON fb.fleet_id = f.id
       WHERE fb.created_at >= DATE_SUB(CURDATE(), ${dateFilter})
+        AND fb.status = 'completed'
       GROUP BY f.type
       ORDER BY revenue DESC
     `);
 
     // Get monthly revenue with proper null handling
-    const [monthlyRevenue] = await pool.query(`
+    const [revenueByMonth] = await pool.query(`
       SELECT 
         DATE_FORMAT(created_at, '%Y-%m') as month,
-        COALESCE(SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END), 0) as revenue,
-        COUNT(*) as bookings
+        COALESCE(SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END), 0) as revenue
       FROM fleet_bookings
       WHERE created_at >= DATE_SUB(CURDATE(), ${dateFilter})
       GROUP BY month
@@ -633,20 +638,30 @@ app.get('/api/admin/analytics/dashboard', authenticateToken, isAdmin, async (req
       FROM fleet_bookings fb
       JOIN users u ON fb.user_id = u.id
       WHERE fb.created_at >= DATE_SUB(CURDATE(), ${dateFilter})
+        AND fb.status = 'completed'
       GROUP BY fb.user_id, u.username, u.email
       ORDER BY totalSpent DESC
       LIMIT 5
     `);
 
-    res.json({
+    // Format the response to match the expected structure
+    const response = {
       summary: {
         ...summary[0],
         totalUsers: userStats[0].totalUsers
       },
-      topServices: topServices || [],
-      monthlyRevenue: monthlyRevenue || [],
-      topCustomers: topCustomers || []
-    });
+      revenueByService: revenueByService.reduce((acc, item) => {
+        acc[item.name] = item.revenue;
+        return acc;
+      }, {}),
+      revenueByMonth: revenueByMonth.reduce((acc, item) => {
+        acc[item.month] = item.revenue;
+        return acc;
+      }, {}),
+      topCustomers
+    };
+
+    res.json(response);
 
   } catch (error) {
     console.error('Error fetching analytics dashboard:', error);

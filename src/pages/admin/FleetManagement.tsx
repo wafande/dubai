@@ -56,12 +56,12 @@ const defaultVehicle: Omit<Vehicle, 'id'> = {
   type: 'helicopter',
   description: '',
   images: [],
-  pricePerHour: 0,
-  pricePerDay: 0,
-  capacity: 0,
+  pricePerHour: 1000,
+  pricePerDay: 24000,
+  capacity: 4,
   features: [],
   specifications: {},
-  location: '',
+  location: 'Dubai',
   availability: {
     dates: [],
     isAvailable: true,
@@ -112,17 +112,16 @@ export function FleetManagement() {
     setIsLoading(true);
     try {
       // Fetch vehicles from the backend API
-      const response = await api.get('/api/admin/fleet');
-      const backendVehicles = response.data;
+      const backendVehicles = await apiService.getFleet();
 
       // Convert backend vehicles to our Vehicle type
-      const formattedVehicles: Vehicle[] = backendVehicles.map((v: any) => {
+      const formattedVehicles: Vehicle[] = backendVehicles.map((v) => {
         // Helper function to safely parse JSON
-        const safeJsonParse = (str: string | null, fallback: any = []) => {
+        const safeJsonParse = (str: string | null, fallback: unknown = []) => {
           if (!str) return fallback;
           try {
             return JSON.parse(str);
-          } catch (e) {
+          } catch {
             console.warn('Failed to parse JSON:', str);
             return fallback;
           }
@@ -134,11 +133,11 @@ export function FleetManagement() {
           type: v.type as VehicleType,
           description: v.description,
           images: v.image_url ? [v.image_url] : [],
-          pricePerHour: v.price,
-          pricePerDay: v.sharing_price,
-          capacity: v.max_capacity || 4,
-          features: Array.isArray(v.features) ? v.features : safeJsonParse(v.features, []),
-          specifications: typeof v.specifications === 'object' ? v.specifications : safeJsonParse(v.specifications, {}),
+          pricePerHour: v.price_per_hour,
+          pricePerDay: v.price_per_day,
+          capacity: v.capacity || 4,
+          features: Array.isArray(v.features) ? v.features : safeJsonParse(v.features, []) as string[],
+          specifications: typeof v.specifications === 'object' ? v.specifications : safeJsonParse(v.specifications, {}) as Record<string, string>,
           location: v.location || 'Dubai',
           availability: {
             dates: [],
@@ -249,19 +248,19 @@ export function FleetManagement() {
         // Save mock data to database
         try {
           await Promise.all([...luxuryCarVehicles, ...mockHelicopters, ...mockYachts].map(vehicle => 
-            api.post('/api/admin/fleet', {
+            apiService.addFleetItem({
               name: vehicle.name,
-              description: vehicle.description,
               type: vehicle.type,
-              price: vehicle.pricePerHour,
-              sharing_price: vehicle.pricePerDay,
-              max_capacity: vehicle.capacity,
-              features: JSON.stringify(vehicle.features),
-              specifications: JSON.stringify(vehicle.specifications),
+              description: vehicle.description,
+              price_per_hour: vehicle.pricePerHour,
+              price_per_day: vehicle.pricePerDay || 0,
+              capacity: vehicle.capacity,
               location: vehicle.location,
+              image_url: vehicle.images[0],
+              features: vehicle.features,
+              specifications: vehicle.specifications,
               is_active: vehicle.isActive,
-              maintenance_schedule: JSON.stringify(vehicle.maintenanceSchedule),
-              image_url: vehicle.images[0]
+              maintenance_schedule: vehicle.maintenanceSchedule
             })
           ));
         } catch (error) {
@@ -290,62 +289,89 @@ export function FleetManagement() {
       name: vehicle.name,
       type: vehicle.type,
       description: vehicle.description,
-      images: vehicle.images,
+      images: vehicle.images || [],
       pricePerHour: vehicle.pricePerHour,
-      pricePerDay: vehicle.pricePerDay,
+      pricePerDay: vehicle.pricePerDay || vehicle.pricePerHour * 24,
       capacity: vehicle.capacity,
-      features: vehicle.features,
-      specifications: vehicle.specifications,
-      location: vehicle.location,
-      availability: vehicle.availability,
+      features: vehicle.features || [],
+      specifications: vehicle.specifications || {},
+      location: vehicle.location || 'Dubai',
+      availability: vehicle.availability || {
+        dates: [],
+        isAvailable: true,
+      },
       isActive: vehicle.isActive,
-      maintenanceSchedule: vehicle.maintenanceSchedule,
+      maintenanceSchedule: vehicle.maintenanceSchedule || {
+        lastMaintenance: '',
+        nextMaintenance: '',
+        notes: '',
+      },
     });
     setIsModalOpen(true);
   };
 
   const handleSaveVehicle = async () => {
     try {
+      // Validate required fields
+      if (!editForm.name || !editForm.type || !editForm.description) {
+        toast.error('Name, type, and description are required');
+        return;
+      }
+
+      // Validate numeric fields
+      if (editForm.pricePerHour <= 0 || editForm.capacity <= 0) {
+        toast.error('Price per hour and capacity must be greater than 0');
+        return;
+      }
+
+      // Validate image URL
+      if (!editForm.images[0]) {
+        toast.error('At least one image is required');
+        return;
+      }
+
       const vehicleData = {
-        name: editForm.name || '',
-        description: editForm.description || '',
+        name: editForm.name.trim(),
         type: editForm.type,
-        price_per_hour: Number(editForm.pricePerHour) || 0,
-        price_per_day: Number(editForm.pricePerDay) || 0,
-        capacity: Number(editForm.capacity) || 0,
-        location: editForm.location || '',
-        image_url: editForm.images[0] || null,
-        features: JSON.stringify(editForm.features || []),
-        specifications: JSON.stringify(editForm.specifications || {}),
+        description: editForm.description.trim(),
+        price_per_hour: Number(editForm.pricePerHour),
+        price_per_day: Number(editForm.pricePerDay) || Number(editForm.pricePerHour) * 24,
+        capacity: Number(editForm.capacity),
+        location: editForm.location.trim() || 'Dubai',
+        image_url: editForm.images[0],
+        features: editForm.features || [],
+        specifications: editForm.specifications || {},
         is_active: editForm.isActive ?? true,
-        maintenance_schedule: JSON.stringify(editForm.maintenanceSchedule || {
+        maintenance_schedule: editForm.maintenanceSchedule || {
           lastMaintenance: '',
           nextMaintenance: '',
           notes: ''
-        })
+        }
       };
 
       if (selectedVehicle) {
         // Update existing vehicle
-        await api.put(`/api/admin/fleet/${selectedVehicle.id}`, vehicleData);
+        await apiService.updateFleetItem(selectedVehicle.id, vehicleData);
         toast.success('Vehicle updated successfully');
+        loadVehicles(); // Refresh the list
+        setIsModalOpen(false);
       } else {
         // Create new vehicle
-        await api.post('/api/admin/fleet', vehicleData);
+        await apiService.addFleetItem(vehicleData);
         toast.success('Vehicle added successfully');
+        loadVehicles(); // Refresh the list
+        setIsModalOpen(false);
       }
-
-      loadVehicles(); // Refresh the list
-      setIsModalOpen(false);
     } catch (error) {
-      toast.error(selectedVehicle ? 'Failed to update vehicle' : 'Failed to add vehicle');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save vehicle';
+      toast.error(errorMessage);
       console.error('Error saving vehicle:', error);
     }
   };
 
   const handleDeleteVehicle = async (vehicleId: string) => {
     try {
-      await api.delete(`/admin/fleet/${vehicleId}`);
+      await apiService.deleteFleetItem(vehicleId);
       toast.success('Vehicle deleted successfully');
       loadVehicles(); // Refresh the list
     } catch (error) {
@@ -458,34 +484,41 @@ export function FleetManagement() {
   }, []);
 
   const processFiles = async (files: FileList) => {
-    if (editForm.images.length + files.length > MAX_IMAGES) {
-      toast.error(`Maximum ${MAX_IMAGES} images allowed`);
-      return;
-    }
-
     setIsUploading(true);
     const newImages: string[] = [];
 
     try {
       for (let i = 0; i < files.length; i++) {
+        if (!ACCEPTED_IMAGE_TYPES.includes(files[i].type)) {
+          toast.error(`File "${files[i].name}" is not a supported image type`);
+          continue;
+        }
+
+        if (files[i].size > MAX_FILE_SIZE) {
+          toast.error(`File "${files[i].name}" exceeds the 5MB size limit`);
+          continue;
+        }
+
         try {
           const dataUrl = await validateImage(files[i]);
           newImages.push(dataUrl);
         } catch (error) {
-          toast.error(error as string);
+          toast.error(`Failed to process "${files[i].name}": ${error}`);
         }
       }
 
       if (newImages.length > 0) {
-        setEditForm({ ...editForm, images: [...editForm.images, ...newImages] });
-        toast.success('Images uploaded successfully');
+        setEditForm(prev => ({
+          ...prev,
+          images: [...prev.images, ...newImages]
+        }));
+        toast.success(`${newImages.length} image${newImages.length > 1 ? 's' : ''} uploaded successfully`);
       }
     } catch (error) {
       console.error('Error processing images:', error);
       toast.error('Failed to process images');
     } finally {
       setIsUploading(false);
-      setIsDragging(false);
     }
   };
 
@@ -502,7 +535,7 @@ export function FleetManagement() {
       }
       processFiles(files);
     }
-  }, [editForm.images]);
+  }, [editForm.images.length]);
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -527,8 +560,11 @@ export function FleetManagement() {
       }
 
       if (newImages.length > 0) {
-        setEditForm({ ...editForm, images: [...editForm.images, ...newImages] });
-        toast.success('Images uploaded successfully');
+        setEditForm(prev => ({
+          ...prev,
+          images: [...prev.images, ...newImages]
+        }));
+        toast.success(`${newImages.length} image${newImages.length > 1 ? 's' : ''} uploaded successfully`);
       }
     } catch (error) {
       console.error('Error processing images:', error);
@@ -536,19 +572,31 @@ export function FleetManagement() {
     } finally {
       setIsUploading(false);
       setIsDragging(false);
+      // Reset the input value to allow uploading the same file again
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
   const handleRemoveImage = (index: number) => {
-    const newImages = editForm.images.filter((_, i) => i !== index);
-    setEditForm({ ...editForm, images: newImages });
+    setEditForm(prev => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index)
+    }));
+    toast.success('Image removed');
   };
 
   const handleReorderImages = (dragIndex: number, dropIndex: number) => {
-    const newImages = [...editForm.images];
+    setEditForm(prev => {
+      const newImages = [...prev.images];
     const [draggedImage] = newImages.splice(dragIndex, 1);
     newImages.splice(dropIndex, 0, draggedImage);
-    setEditForm({ ...editForm, images: newImages });
+      return {
+        ...prev,
+        images: newImages
+      };
+    });
   };
 
   const handleBookVehicle = (vehicle: Vehicle) => {
@@ -663,8 +711,14 @@ export function FleetManagement() {
               <div className="mt-4 space-y-2">
                 <div className="flex items-center text-sm text-gray-500">
                   <DollarSign className="h-4 w-4 mr-1" />
-                  ${formatPrice(vehicle.pricePerHour)}/hour
+                  AED {formatPrice(vehicle.pricePerHour)}/hour
                 </div>
+                {vehicle.pricePerDay && (
+                  <div className="flex items-center text-sm text-gray-500">
+                    <Calendar className="h-4 w-4 mr-1" />
+                    AED {formatPrice(vehicle.pricePerDay)}/day
+                  </div>
+                )}
                 <div className="flex items-center text-sm text-gray-500">
                   <Users className="h-4 w-4 mr-1" />
                   {vehicle.capacity} passengers
@@ -674,6 +728,26 @@ export function FleetManagement() {
                   {vehicle.location}
                 </div>
               </div>
+
+              {vehicle.features.length > 0 && (
+                <div className="mt-4">
+                  <div className="flex flex-wrap gap-2">
+                    {vehicle.features.slice(0, 3).map((feature, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-amber-100 text-amber-800"
+                      >
+                        {feature}
+                      </span>
+                    ))}
+                    {vehicle.features.length > 3 && (
+                      <span className="text-xs text-gray-500">
+                        +{vehicle.features.length - 3} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-4 flex justify-end space-x-2">
                 <button
@@ -733,7 +807,8 @@ export function FleetManagement() {
                       type="text"
                       value={editForm.name}
                       onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm text-gray-900 bg-white"
+                      placeholder="Enter vehicle name"
                     />
                   </div>
                   <div>
@@ -741,7 +816,7 @@ export function FleetManagement() {
                     <select
                       value={editForm.type}
                       onChange={(e) => setEditForm({ ...editForm, type: e.target.value as VehicleType })}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm text-gray-900 bg-white"
                     >
                       <option value="helicopter">Helicopter</option>
                       <option value="yacht">Yacht</option>
@@ -757,34 +832,173 @@ export function FleetManagement() {
                     value={editForm.description}
                     onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                     rows={3}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm text-gray-900 bg-white"
+                    placeholder="Enter vehicle description"
                   />
+                </div>
+
+                {/* Image Upload Section */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Images ({editForm.images.length}/{MAX_IMAGES})
+                  </label>
+                  
+                  {/* Image Upload Zone */}
+                  <div
+                    ref={dropZoneRef}
+                    onDragEnter={handleDragEnter}
+                    onDragLeave={handleDragLeave}
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
+                    className={`
+                      relative border-2 border-dashed rounded-lg p-4 text-center
+                      ${isDragging ? 'border-amber-500 bg-amber-50' : 'border-gray-300 hover:border-amber-500'}
+                    `}
+                  >
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleImageUpload}
+                      accept="image/jpeg,image/png,image/webp"
+                      multiple
+                      className="hidden"
+                    />
+
+                    <div className="space-y-2">
+                      <div className="flex justify-center">
+                        <Upload className={`h-10 w-10 ${isDragging ? 'text-amber-500' : 'text-gray-400'}`} />
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {isUploading ? (
+                          <span>Uploading...</span>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              className="text-amber-600 hover:text-amber-700 font-medium"
+                            >
+                              Click to upload
+                            </button>
+                            {' or drag and drop'}
+                          </>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        PNG, JPG, WEBP up to 5MB (max {MAX_IMAGES} images)
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Image Preview Grid */}
+                  {editForm.images.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-4">
+                      {editForm.images.map((image, index) => (
+                        <div
+                          key={index}
+                          className="relative group aspect-square rounded-lg overflow-hidden border border-gray-200"
+                        >
+                          <img
+                            src={image}
+                            alt={`Vehicle image ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          
+                          {/* Image Actions Overlay */}
+                          <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center space-x-2">
+                            {/* Move Left */}
+                            {index > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleReorderImages(index, index - 1)}
+                                className="p-1 bg-white rounded-full text-gray-700 hover:text-amber-600"
+                                title="Move left"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              </button>
+                            )}
+                            
+                            {/* Delete */}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveImage(index)}
+                              className="p-1 bg-white rounded-full text-red-600 hover:text-red-700"
+                              title="Remove image"
+                            >
+                              <X className="h-5 w-5" />
+                            </button>
+                            
+                            {/* Move Right */}
+                            {index < editForm.images.length - 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleReorderImages(index, index + 1)}
+                                className="p-1 bg-white rounded-full text-gray-700 hover:text-amber-600"
+                                title="Move right"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Primary Image Badge */}
+                          {index === 0 && (
+                            <div className="absolute top-2 left-2 px-2 py-1 bg-amber-500 text-white text-xs rounded-full">
+                              Primary
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Pricing */}
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Price per Hour ($)</label>
+                    <label className="block text-sm font-medium text-gray-700">Price per Hour (AED)</label>
                     <input
                       type="number"
                       value={editForm.pricePerHour}
                       onChange={(e) => setEditForm({ ...editForm, pricePerHour: Number(e.target.value) })}
                       min="0"
                       step="0.01"
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm text-gray-900 bg-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Price per Day ($)</label>
+                    <label className="block text-sm font-medium text-gray-700">Price per Day (AED)</label>
                     <input
                       type="number"
                       value={editForm.pricePerDay}
                       onChange={(e) => setEditForm({ ...editForm, pricePerDay: Number(e.target.value) })}
                       min="0"
                       step="0.01"
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm text-gray-900 bg-white"
                     />
                   </div>
+                </div>
+
+                {/* Capacity */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Capacity (Number of Passengers)</label>
+                  <input
+                    type="number"
+                    value={editForm.capacity}
+                    onChange={(e) => setEditForm({ ...editForm, capacity: Number(e.target.value) })}
+                    min="1"
+                    step="1"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm text-gray-900 bg-white"
+                  />
+                  <p className="mt-1 text-sm text-gray-500">
+                    {editForm.type === 'helicopter' ? 'Maximum helicopter passenger capacity' :
+                     editForm.type === 'yacht' ? 'Maximum yacht passenger capacity' :
+                     'Maximum vehicle passenger capacity'}
+                  </p>
                 </div>
 
                 {/* Features */}
@@ -801,7 +1015,8 @@ export function FleetManagement() {
                             newFeatures[index] = e.target.value;
                             setEditForm({ ...editForm, features: newFeatures });
                           }}
-                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm"
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm text-gray-900 bg-white"
+                          placeholder="Enter feature"
                         />
                         <button
                           type="button"
@@ -837,6 +1052,18 @@ export function FleetManagement() {
                   <label htmlFor="isActive" className="text-sm font-medium text-gray-700">
                     Active
                   </label>
+                </div>
+
+                {/* Location */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Location</label>
+                  <input
+                    type="text"
+                    value={editForm.location}
+                    onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm text-gray-900 bg-white"
+                    placeholder="e.g., Dubai Marina, Dubai Helipad"
+                  />
                 </div>
 
                 {/* Action Buttons */}

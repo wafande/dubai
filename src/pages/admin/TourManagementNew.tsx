@@ -8,7 +8,7 @@ import {
 import { toast } from 'react-hot-toast';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { tourService, Tour, TourFilters } from '../../services/tourService';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 import TourForm from '../../components/tours/TourForm';
 import TourListItem from '../../components/tours/TourListItem';
 

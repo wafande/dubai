@@ -126,48 +126,40 @@ export function AnalyticsDashboard() {
     end: new Date()
   });
   const [exportData, setExportData] = useState<any[]>([]);
-  const [refreshInterval, setRefreshInterval] = useState<number>(30); // seconds
+  const [refreshInterval, setRefreshInterval] = useState<number>(3600); // 1 hour refresh rate
 
   // Enhanced fetchStats with date range
   const fetchStats = useCallback(async () => {
     try {
-      const data = await apiService.read('/api/admin/stats', {
+      const response = await apiService.instance.get('/api/admin/analytics/dashboard', {
         params: {
-          start_date: format(startOfDay(dateRange.start), 'yyyy-MM-dd'),
-          end_date: format(endOfDay(dateRange.end), 'yyyy-MM-dd')
+          range: dateRange
         }
       });
       
+      const data = response.data;
+      
       setStats({
         overall: {
-          total_bookings: data.overall?.total_bookings ?? 0,
-          completed_bookings: data.overall?.completed_bookings ?? 0,
-          pending_bookings: data.overall?.pending_bookings ?? 0,
-          cancelled_bookings: data.overall?.cancelled_bookings ?? 0,
-          total_revenue: data.overall?.total_revenue ?? 0
+          total_bookings: data.summary?.totalBookings ?? 0,
+          completed_bookings: data.summary?.completedBookings ?? 0,
+          pending_bookings: data.summary?.pendingBookings ?? 0,
+          cancelled_bookings: data.summary?.cancelledBookings ?? 0,
+          total_revenue: data.summary?.totalRevenue ?? 0
         },
-        byVehicleType: data.byVehicleType ?? [],
-        recentBookings: data.recentBookings ?? [],
-        monthlyRevenue: data.monthlyRevenue ?? []
+        byVehicleType: data.revenueByService ? Object.entries(data.revenueByService).map(([type, revenue]) => ({
+          type,
+          total_bookings: 0, // This will be updated when we have the data
+          revenue: revenue as number
+        })) : [],
+        recentBookings: [],
+        monthlyRevenue: data.revenueByMonth ? Object.entries(data.revenueByMonth).map(([month, revenue]) => ({
+          month,
+          revenue: revenue as number,
+          bookings: 0 // This will be updated when we have the data
+        })) : []
       });
 
-      // Prepare export data
-      const exportableData = [
-        ...data.monthlyRevenue.map((item: any) => ({
-          period: item.month,
-          revenue: item.revenue,
-          bookings: item.bookings,
-          type: 'Monthly Revenue'
-        })),
-        ...data.byVehicleType.map((item: any) => ({
-          vehicle_type: item.type,
-          bookings: item.total_bookings,
-          revenue: item.revenue,
-          type: 'Vehicle Performance'
-        }))
-      ];
-      setExportData(exportableData);
-      
       setError(null);
     } catch (err) {
       setError('Failed to load dashboard data');
@@ -296,6 +288,7 @@ export function AnalyticsDashboard() {
               <option value="30">Refresh: 30s</option>
               <option value="60">Refresh: 1m</option>
               <option value="300">Refresh: 5m</option>
+              <option value="3600">Refresh: 1h</option>
             </select>
           </label>
 

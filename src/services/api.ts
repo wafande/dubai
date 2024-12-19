@@ -151,7 +151,7 @@ class ApiService {
   // Fleet management endpoints
   async getFleet(type?: VehicleType): Promise<FleetItem[]> {
     try {
-      const response = await this.instance.get('/admin/fleet', { params: { type } });
+      const response = await this.instance.get('/api/admin/fleet', { params: { type } });
       return response.data;
     } catch (error) {
       throw this.handleError(error);
@@ -160,7 +160,7 @@ class ApiService {
 
   async addFleetItem(data: Omit<FleetItem, 'id'>): Promise<FleetItem> {
     try {
-      const response = await this.instance.post('/admin/fleet', data);
+      const response = await this.instance.post('/api/admin/fleet', data);
       return response.data;
     } catch (error) {
       throw this.handleError(error);
@@ -169,7 +169,7 @@ class ApiService {
 
   async updateFleetItem(id: string, data: Partial<FleetItem>): Promise<FleetItem> {
     try {
-      const response = await this.instance.put(`/admin/fleet/${id}`, data);
+      const response = await this.instance.put(`/api/admin/fleet/${id}`, data);
       return response.data;
     } catch (error) {
       throw this.handleError(error);
@@ -178,7 +178,7 @@ class ApiService {
 
   async deleteFleetItem(id: string): Promise<void> {
     try {
-      await this.instance.delete(`/admin/fleet/${id}`);
+      await this.instance.delete(`/api/admin/fleet/${id}`);
     } catch (error) {
       throw this.handleError(error);
     }
