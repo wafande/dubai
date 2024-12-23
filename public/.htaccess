@@ -13,18 +13,19 @@
 <IfModule mod_mime.c>
   AddType application/javascript .js
   AddType application/javascript .mjs
-  AddType text/javascript .js
-  AddType text/javascript .mjs
   AddType application/javascript .jsx
   AddType application/javascript .ts
   AddType application/javascript .tsx
   AddType font/woff2 .woff2
+  AddType font/woff .woff
+  AddType font/ttf .ttf
   AddType image/svg+xml .svg
   AddType image/png .png
   AddType image/jpeg .jpg .jpeg
   AddType image/webp .webp
   AddType image/x-icon .ico
   AddType application/json .json
+  AddType text/css .css
 </IfModule>
 
 # Enable CORS and set proper headers
@@ -37,14 +38,14 @@
         Header set Content-Type "application/javascript"
     </FilesMatch>
     
+    # Set correct content type for fonts
+    <FilesMatch "\.woff2$">
+        Header set Content-Type "font/woff2"
+    </FilesMatch>
+    
     # Set correct content type for JSON files
     <FilesMatch "\.json$">
         Header set Content-Type "application/json"
-    </FilesMatch>
-    
-    # Set correct content type for WOFF2 fonts
-    <FilesMatch "\.woff2$">
-        Header set Content-Type "font/woff2"
     </FilesMatch>
 </IfModule>
 
@@ -58,18 +59,18 @@
   ExpiresByType image/webp "access plus 1 year"
   ExpiresByType image/svg+xml "access plus 1 year"
   ExpiresByType image/x-icon "access plus 1 year"
-  ExpiresByType font/woff2 "access plus 1 year"
-  ExpiresByType text/css "access plus 1 month"
   ExpiresByType application/javascript "access plus 1 month"
   ExpiresByType text/javascript "access plus 1 month"
-  ExpiresByType application/x-javascript "access plus 1 month"
-  ExpiresByType text/x-javascript "access plus 1 month"
+  ExpiresByType text/css "access plus 1 month"
+  ExpiresByType font/woff2 "access plus 1 year"
+  ExpiresByType font/woff "access plus 1 year"
+  ExpiresByType font/ttf "access plus 1 year"
   ExpiresByType application/json "access plus 0 seconds"
 </IfModule>
 
 # Compress text files
 <IfModule mod_deflate.c>
-  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/x-javascript application/json font/woff2
+  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/x-javascript application/json font/woff2 font/woff font/ttf
 </IfModule>
 
 # Set default charset

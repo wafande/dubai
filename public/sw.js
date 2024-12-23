@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dubai-luxury-cache-v4';
+const CACHE_NAME = 'dubai-luxury-cache-v5';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -10,6 +10,28 @@ const STATIC_ASSETS = [
   '/assets/fonts/main.woff2',
   '/icons/icon-144x144.png'
 ];
+
+// MIME type mapping
+const MIME_TYPES = {
+  '.js': 'application/javascript',
+  '.mjs': 'application/javascript',
+  '.css': 'text/css',
+  '.html': 'text/html',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
+  '.ttf': 'font/ttf'
+};
+
+// Helper function to get MIME type
+function getMimeType(url) {
+  const extension = url.split('.').pop().toLowerCase();
+  return MIME_TYPES['.' + extension] || 'text/plain';
+}
 
 // Helper function to normalize URLs
 function normalizeUrl(url) {
@@ -95,14 +117,25 @@ async function handleFetch(request) {
     return fetch(request);
   }
 
+  const normalizedUrl = normalizeUrl(request.url);
+  const mimeType = getMimeType(normalizedUrl);
+
   // Handle module scripts
-  if (request.destination === 'script' && request.mode === 'module') {
+  if (request.destination === 'script') {
     try {
-      const response = await fetch(request);
+      const response = await fetch(request.clone());
       if (response.ok) {
+        const newResponse = new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: new Headers({
+            'Content-Type': 'application/javascript',
+            ...Object.fromEntries(response.headers)
+          })
+        });
         const cache = await caches.open(CACHE_NAME);
-        cache.put(request, response.clone());
-        return response;
+        cache.put(request, newResponse.clone());
+        return newResponse;
       }
     } catch (error) {
       const cachedResponse = await caches.match(request);
@@ -112,24 +145,60 @@ async function handleFetch(request) {
     }
   }
 
-  const normalizedUrl = normalizeUrl(request.url);
-  
-  try {
-    // Try cache first for static assets
-    if (STATIC_ASSETS.some(asset => normalizedUrl.endsWith(asset))) {
-      const cachedResponse = await caches.match(request);
-      if (cachedResponse) {
-        return cachedResponse;
+  // Handle font requests
+  if (request.destination === 'font' || normalizedUrl.includes('/fonts/')) {
+    const fontPaths = [
+      normalizedUrl,
+      normalizedUrl.replace('/fonts/', '/assets/fonts/'),
+      `/assets/fonts/${normalizedUrl.split('/').pop()}`
+    ];
+
+    // Try to fetch from network first
+    try {
+      const response = await fetch(request.clone());
+      if (response.ok) {
+        const newResponse = new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: new Headers({
+            'Content-Type': 'font/woff2',
+            ...Object.fromEntries(response.headers)
+          })
+        });
+        const cache = await caches.open(CACHE_NAME);
+        cache.put(request, newResponse.clone());
+        return newResponse;
+      }
+    } catch (error) {
+      // Try cache with multiple paths
+      for (const path of fontPaths) {
+        const fontRequest = new Request(path);
+        const cachedResponse = await caches.match(fontRequest);
+        if (cachedResponse) {
+          return cachedResponse;
+        }
       }
     }
+  }
 
-    // Try network
+  try {
+    // Try network first for all other requests
     const networkResponse = await fetch(request);
     if (networkResponse.ok) {
+      // Ensure correct MIME type in response
+      const newResponse = new Response(networkResponse.body, {
+        status: networkResponse.status,
+        statusText: networkResponse.statusText,
+        headers: new Headers({
+          'Content-Type': mimeType,
+          ...Object.fromEntries(networkResponse.headers)
+        })
+      });
+      
       // Cache successful responses
       const cache = await caches.open(CACHE_NAME);
-      cache.put(request, networkResponse.clone());
-      return networkResponse;
+      cache.put(request, newResponse.clone());
+      return newResponse;
     }
     throw new Error('Network response was not ok');
   } catch (error) {
@@ -146,39 +215,7 @@ async function handleFetch(request) {
       return createOfflineResponse();
     }
 
-    // Handle image requests
-    if (request.destination === 'image') {
-      return new Response(
-        'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" fill="#999">Image</text></svg>',
-        {
-          headers: { 'Content-Type': 'image/svg+xml' }
-        }
-      );
-    }
-
-    // Handle font requests
-    if (request.destination === 'font') {
-      // Try alternative font paths
-      const fontPaths = [
-        normalizedUrl,
-        normalizedUrl.replace('/fonts/', '/assets/fonts/'),
-        `/assets/fonts/${normalizedUrl.split('/').pop()}`
-      ];
-
-      for (const path of fontPaths) {
-        const fontResponse = await caches.match(new Request(path));
-        if (fontResponse) {
-          return fontResponse;
-        }
-      }
-
-      return new Response('', {
-        status: 404,
-        statusText: 'Font not available offline'
-      });
-    }
-
-    // For other requests
+    // Return appropriate error response based on request type
     return new Response('Resource not available offline', {
       status: 404,
       statusText: 'Not Found',

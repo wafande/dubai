@@ -21,6 +21,8 @@ export default defineConfig({
           let extType = assetInfo.name.split('.').at(1);
           if (/png|jpe?g|svg|gif|tiff|bmp|ico/i.test(extType)) {
             extType = 'img';
+          } else if (/woff2?|ttf|otf|eot/i.test(extType)) {
+            extType = 'fonts';
           }
           return `assets/${extType}/[name]-[hash][extname]`;
         },
@@ -33,5 +35,12 @@ export default defineConfig({
     port: 3000,
     strictPort: true,
     host: true,
+    headers: {
+      'Content-Type': {
+        '.js': 'application/javascript',
+        '.mjs': 'application/javascript',
+        '.woff2': 'font/woff2'
+      }
+    }
   },
 });

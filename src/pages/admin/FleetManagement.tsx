@@ -8,15 +8,13 @@ import {
   DollarSign,
   Users,
   Clock,
-  Plane,
   Ship,
+  Plane,
   Car,
   Calendar,
   MapPin,
-  Info,
   Upload,
   X,
-  CropIcon,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { vehicles as frontendVehicles } from '../../data/vehicles';
