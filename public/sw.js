@@ -1,11 +1,11 @@
-const CACHE_NAME = 'dubai-luxury-cache-v1';
+const CACHE_NAME = 'dubai-luxury-cache-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/favicon.ico',
   '/apple-touch-icon.png',
-  '/images/logo.png'
+  '/assets/img/logo.png'
 ];
 
 // Helper function to create offline response
@@ -39,18 +39,13 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        // Cache what we can, but don't fail if some assets fail to cache
-        return Promise.allSettled(
-          STATIC_ASSETS.map(url => 
-            cache.add(url).catch(err => {
-              console.warn(`Failed to cache ${url}:`, err);
-              return null;
-            })
-          )
-        );
+        console.log('Opened cache');
+        return cache.addAll(STATIC_ASSETS);
+      })
+      .catch(error => {
+        console.error('Failed to cache assets:', error);
       })
   );
-  // Activate new service worker immediately
   self.skipWaiting();
 });
 
@@ -62,11 +57,14 @@ self.addEventListener('activate', (event) => {
         return Promise.all(
           cacheNames
             .filter((name) => name !== CACHE_NAME)
-            .map((name) => caches.delete(name))
+            .map((name) => {
+              console.log('Deleting old cache:', name);
+              return caches.delete(name);
+            })
         );
       })
       .then(() => {
-        // Take control of all pages immediately
+        console.log('Service Worker activated');
         return self.clients.claim();
       })
   );
@@ -79,8 +77,8 @@ async function handleFetch(request) {
     return fetch(request);
   }
 
-  // Skip API calls and cross-origin requests
-  if (request.url.includes('/api/') || !request.url.startsWith(self.location.origin)) {
+  // Skip API calls
+  if (request.url.includes('/api/')) {
     return fetch(request);
   }
 
@@ -109,10 +107,10 @@ async function handleFetch(request) {
         return createOfflineResponse();
       }
 
-      // For assets like images, try to return a placeholder or fallback
+      // For assets like images, try to return a placeholder
       if (request.destination === 'image') {
         return new Response(
-          'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif">Image</text></svg>',
+          'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" fill="#999">Image</text></svg>',
           {
             headers: { 'Content-Type': 'image/svg+xml' }
           }
@@ -127,27 +125,12 @@ async function handleFetch(request) {
       });
     } catch (cacheError) {
       console.error('Cache retrieval failed:', cacheError);
-      
-      // Last resort - return offline page for navigation requests
-      if (request.mode === 'navigate') {
-        return createOfflineResponse();
-      }
-      
-      throw cacheError;
+      return createOfflineResponse();
     }
   }
 }
 
 // Fetch event - serve from network first, fallback to cache
 self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    handleFetch(event.request)
-      .catch(error => {
-        console.error('Fetch handler failed:', error);
-        if (event.request.mode === 'navigate') {
-          return createOfflineResponse();
-        }
-        throw error;
-      })
-  );
+  event.respondWith(handleFetch(event.request));
 }); 
