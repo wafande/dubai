@@ -1,11 +1,14 @@
-const CACHE_NAME = 'dubai-luxury-cache-v2';
+const CACHE_NAME = 'dubai-luxury-cache-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/favicon.ico',
+  '/favicon.png',
   '/apple-touch-icon.png',
-  '/assets/img/logo.png'
+  '/assets/img/logo.png',
+  '/assets/fonts/main.woff2',
+  '/icons/icon-144x144.png'
 ];
 
 // Helper function to create offline response
@@ -40,10 +43,14 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAME)
       .then((cache) => {
         console.log('Opened cache');
-        return cache.addAll(STATIC_ASSETS);
-      })
-      .catch(error => {
-        console.error('Failed to cache assets:', error);
+        return Promise.allSettled(
+          STATIC_ASSETS.map(url => 
+            cache.add(url).catch(err => {
+              console.warn(`Failed to cache ${url}:`, err);
+              return null;
+            })
+          )
+        );
       })
   );
   self.skipWaiting();
@@ -83,7 +90,15 @@ async function handleFetch(request) {
   }
 
   try {
-    // Try network first
+    // Try cache first for static assets
+    if (STATIC_ASSETS.some(asset => request.url.endsWith(asset))) {
+      const cachedResponse = await caches.match(request);
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+    }
+
+    // Try network
     const networkResponse = await fetch(request);
     if (networkResponse.ok) {
       // Cache successful responses
@@ -92,45 +107,48 @@ async function handleFetch(request) {
       return networkResponse;
     }
     throw new Error('Network response was not ok');
-  } catch (networkError) {
-    console.log('Network request failed, falling back to cache:', networkError);
+  } catch (error) {
+    console.log('Request failed:', error);
 
-    try {
-      // Try cache
-      const cachedResponse = await caches.match(request);
-      if (cachedResponse) {
-        return cachedResponse;
-      }
+    // Try cache
+    const cachedResponse = await caches.match(request);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
 
-      // If it's a navigation request, return offline page
-      if (request.mode === 'navigate') {
-        return createOfflineResponse();
-      }
-
-      // For assets like images, try to return a placeholder
-      if (request.destination === 'image') {
-        return new Response(
-          'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" fill="#999">Image</text></svg>',
-          {
-            headers: { 'Content-Type': 'image/svg+xml' }
-          }
-        );
-      }
-
-      // For other requests, return a basic error response
-      return new Response('Resource not available offline', {
-        status: 404,
-        statusText: 'Not Found',
-        headers: { 'Content-Type': 'text/plain' }
-      });
-    } catch (cacheError) {
-      console.error('Cache retrieval failed:', cacheError);
+    // Handle navigation requests
+    if (request.mode === 'navigate') {
       return createOfflineResponse();
     }
+
+    // Handle image requests
+    if (request.destination === 'image') {
+      return new Response(
+        'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" fill="#999">Image</text></svg>',
+        {
+          headers: { 'Content-Type': 'image/svg+xml' }
+        }
+      );
+    }
+
+    // Handle font requests
+    if (request.destination === 'font') {
+      return new Response('', {
+        status: 404,
+        statusText: 'Font not available offline'
+      });
+    }
+
+    // For other requests
+    return new Response('Resource not available offline', {
+      status: 404,
+      statusText: 'Not Found',
+      headers: { 'Content-Type': 'text/plain' }
+    });
   }
 }
 
-// Fetch event - serve from network first, fallback to cache
+// Fetch event - try cache first for static assets, then network
 self.addEventListener('fetch', (event) => {
   event.respondWith(handleFetch(event.request));
 }); 
