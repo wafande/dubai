@@ -15,18 +15,37 @@
   AddType application/javascript .mjs
   AddType text/javascript .js
   AddType text/javascript .mjs
+  AddType application/javascript .jsx
+  AddType application/javascript .ts
+  AddType application/javascript .tsx
   AddType font/woff2 .woff2
   AddType image/svg+xml .svg
   AddType image/png .png
   AddType image/jpeg .jpg .jpeg
   AddType image/webp .webp
   AddType image/x-icon .ico
+  AddType application/json .json
 </IfModule>
 
-# Enable CORS
+# Enable CORS and set proper headers
 <IfModule mod_headers.c>
     Header set Access-Control-Allow-Origin "*"
     Header set X-Content-Type-Options "nosniff"
+    
+    # Set correct content type for JavaScript modules
+    <FilesMatch "\.(js|mjs|jsx|ts|tsx)$">
+        Header set Content-Type "application/javascript"
+    </FilesMatch>
+    
+    # Set correct content type for JSON files
+    <FilesMatch "\.json$">
+        Header set Content-Type "application/json"
+    </FilesMatch>
+    
+    # Set correct content type for WOFF2 fonts
+    <FilesMatch "\.woff2$">
+        Header set Content-Type "font/woff2"
+    </FilesMatch>
 </IfModule>
 
 # Cache static assets
@@ -51,4 +70,10 @@
 # Compress text files
 <IfModule mod_deflate.c>
   AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/x-javascript application/json font/woff2
-</IfModule> 
+</IfModule>
+
+# Set default charset
+AddDefaultCharset UTF-8
+
+# Prevent directory listing
+Options -Indexes 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dubai-luxury-cache-v3';
+const CACHE_NAME = 'dubai-luxury-cache-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -10,6 +10,12 @@ const STATIC_ASSETS = [
   '/assets/fonts/main.woff2',
   '/icons/icon-144x144.png'
 ];
+
+// Helper function to normalize URLs
+function normalizeUrl(url) {
+  const urlObj = new URL(url, self.location.origin);
+  return urlObj.pathname;
+}
 
 // Helper function to create offline response
 function createOfflineResponse() {
@@ -89,9 +95,28 @@ async function handleFetch(request) {
     return fetch(request);
   }
 
+  // Handle module scripts
+  if (request.destination === 'script' && request.mode === 'module') {
+    try {
+      const response = await fetch(request);
+      if (response.ok) {
+        const cache = await caches.open(CACHE_NAME);
+        cache.put(request, response.clone());
+        return response;
+      }
+    } catch (error) {
+      const cachedResponse = await caches.match(request);
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+    }
+  }
+
+  const normalizedUrl = normalizeUrl(request.url);
+  
   try {
     // Try cache first for static assets
-    if (STATIC_ASSETS.some(asset => request.url.endsWith(asset))) {
+    if (STATIC_ASSETS.some(asset => normalizedUrl.endsWith(asset))) {
       const cachedResponse = await caches.match(request);
       if (cachedResponse) {
         return cachedResponse;
@@ -133,6 +158,20 @@ async function handleFetch(request) {
 
     // Handle font requests
     if (request.destination === 'font') {
+      // Try alternative font paths
+      const fontPaths = [
+        normalizedUrl,
+        normalizedUrl.replace('/fonts/', '/assets/fonts/'),
+        `/assets/fonts/${normalizedUrl.split('/').pop()}`
+      ];
+
+      for (const path of fontPaths) {
+        const fontResponse = await caches.match(new Request(path));
+        if (fontResponse) {
+          return fontResponse;
+        }
+      }
+
       return new Response('', {
         status: 404,
         statusText: 'Font not available offline'
